@@ -9,11 +9,18 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
+bool virt_ctlr_pro::intercept(input_event *e) const {
+    if(this->interceptor != nullptr) {
+       return this->interceptor(e);
+    }
+    return true;
+}
+
 //private
-void virt_ctlr_pro::relay_events(std::shared_ptr<phys_ctlr> phys)
-{
+void virt_ctlr_pro::relay_events(std::shared_ptr<phys_ctlr> phys) const {
     struct input_event ev;
     struct libevdev *evdev = phys->get_evdev();
 
@@ -22,7 +29,9 @@ void virt_ctlr_pro::relay_events(std::shared_ptr<phys_ctlr> phys)
         if (ret == LIBEVDEV_READ_STATUS_SYNC) {
             std::cout << "handle sync\n";
             while (ret == LIBEVDEV_READ_STATUS_SYNC) {
-                libevdev_uinput_write_event(uidev, ev.type, ev.code, ev.value);
+                if(this->intercept(&ev)) {
+                    libevdev_uinput_write_event(uidev, ev.type, ev.code, ev.value);
+                }
                 ret = libevdev_next_event(evdev, LIBEVDEV_READ_FLAG_SYNC, &ev);
             }
         } else if (ret == LIBEVDEV_READ_STATUS_SUCCESS) {
@@ -38,7 +47,9 @@ void virt_ctlr_pro::relay_events(std::shared_ptr<phys_ctlr> phys)
                 continue;
             }
 #endif
-            libevdev_uinput_write_event(uidev, ev.type, ev.code, ev.value);
+            if(this->intercept(&ev)) {
+                libevdev_uinput_write_event(uidev, ev.type, ev.code, ev.value);
+            }
         }
         ret = libevdev_next_event(evdev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
     }
@@ -153,7 +164,7 @@ void virt_ctlr_pro::handle_uinput_event()
 }
 
 //public
-virt_ctlr_pro::virt_ctlr_pro(std::shared_ptr<phys_ctlr> phys, epoll_mgr& epoll_manager) :
+virt_ctlr_pro::virt_ctlr_pro(std::shared_ptr<phys_ctlr> phys, epoll_mgr& epoll_manager, const bool should_subscribe, std::function<bool(input_event*)> interceptor) :
     phys(phys),
     epoll_manager(epoll_manager),
     subscriber(nullptr),
@@ -161,7 +172,8 @@ virt_ctlr_pro::virt_ctlr_pro(std::shared_ptr<phys_ctlr> phys, epoll_mgr& epoll_m
     uidev(nullptr),
     uifd(-1),
     rumble_effects(),
-    mac(phys->get_mac_addr())
+    mac(phys->get_mac_addr()),
+    interceptor(std::move(interceptor))
 {
     int ret;
 
@@ -260,14 +272,18 @@ virt_ctlr_pro::virt_ctlr_pro(std::shared_ptr<phys_ctlr> phys, epoll_mgr& epoll_m
     int flags = fcntl(get_uinput_fd(), F_GETFL, 0);
     fcntl(get_uinput_fd(), F_SETFL, flags | O_NONBLOCK);
 
-    subscriber = std::make_shared<epoll_subscriber>(std::vector({get_uinput_fd()}),
+    if(should_subscribe) {
+        subscriber = std::make_shared<epoll_subscriber>(std::vector({get_uinput_fd()}),
                                                     [=](int event_fd){handle_events(event_fd);});
-    epoll_manager.add_subscriber(subscriber);
+        epoll_manager.add_subscriber(subscriber);
+    }
 }
 
 virt_ctlr_pro::~virt_ctlr_pro()
 {
-    epoll_manager.remove_subscriber(subscriber);
+    if(subscriber != nullptr) {
+        epoll_manager.remove_subscriber(subscriber);
+    }
 
     libevdev_uinput_destroy(uidev);
     close(uifd);

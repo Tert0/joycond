@@ -20,11 +20,17 @@ class virt_ctlr_pro : public virt_ctlr
         int uifd;
         std::map<int, struct ff_effect> rumble_effects;
         std::string mac;
+        std::function<bool(input_event*)> interceptor;
 
-        void relay_events(std::shared_ptr<phys_ctlr> phys);
+
+        bool intercept(input_event *e) const;
+        void relay_events(std::shared_ptr<phys_ctlr> phys) const;
         void handle_uinput_event();
+
+
     public:
-        virt_ctlr_pro(std::shared_ptr<phys_ctlr> phys, epoll_mgr& epoll_manager);
+        virt_ctlr_pro(std::shared_ptr<phys_ctlr> phys, epoll_mgr &epoll_manager, bool should_subscribe = true,
+                      std::function<bool(input_event*)> interceptor = nullptr);
         virtual ~virt_ctlr_pro();
 
         virtual void handle_events(int fd);

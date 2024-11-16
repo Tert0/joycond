@@ -16,8 +16,8 @@ class ctlr_mgr
         epoll_mgr& epoll_manager;
         std::map<std::string, std::shared_ptr<phys_ctlr>> unpaired_controllers;
         std::map<std::string, std::shared_ptr<epoll_subscriber>> subscribers;
-        std::vector<std::unique_ptr<virt_ctlr>> paired_controllers;
-        std::vector<std::unique_ptr<virt_ctlr>> stale_controllers;
+        std::vector<std::shared_ptr<virt_ctlr>> paired_controllers;
+        std::vector<std::shared_ptr<virt_ctlr>> stale_controllers;
 
         std::shared_ptr<phys_ctlr> left;
         std::shared_ptr<phys_ctlr> right;
@@ -26,6 +26,10 @@ class ctlr_mgr
         void add_passthrough_ctlr(std::shared_ptr<phys_ctlr> phys);
         void add_combined_ctlr();
         void add_virt_procon_ctlr(std::shared_ptr<phys_ctlr> phys);
+
+        unsigned int fill_empty_slot(std::shared_ptr<virt_ctlr> ctlr);
+
+        void add_virt_double_procon_ctlr(std::shared_ptr<phys_ctlr> phys);
 
     public:
         ctlr_mgr(epoll_mgr& epoll_manager);

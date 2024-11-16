@@ -6,6 +6,8 @@
 #include <iostream>
 #include <unistd.h>
 
+#include "virt_ctlr_double_pro.h"
+
 //private
 void ctlr_mgr::epoll_event_callback(int event_fd)
 {
@@ -21,6 +23,10 @@ void ctlr_mgr::epoll_event_callback(int event_fd)
                 case phys_ctlr::PairingState::Virt_Procon:
                     std::cout << "Virtual procon paired\n";
                     add_virt_procon_ctlr(ctlr);
+                    break;
+                case phys_ctlr::PairingState::Virt_Double_Procon:
+                    std::cout << "Virtual double procon paired\n";
+                    add_virt_double_procon_ctlr(ctlr);
                     break;
                 case phys_ctlr::PairingState::Waiting:
                     std::cout << "Waiting controller needs partner\n";
@@ -140,6 +146,34 @@ void ctlr_mgr::add_virt_procon_ctlr(std::shared_ptr<phys_ctlr> phys)
         procon->set_player_leds_to_player(paired_controllers.size() % 4 + 1);
         paired_controllers.push_back(std::move(procon));
     }
+
+    unpaired_controllers.erase(phys->get_devpath());
+}
+
+
+unsigned int ctlr_mgr::fill_empty_slot(std::shared_ptr<virt_ctlr> ctlr) {
+    for (unsigned int i = 0; i < paired_controllers.size(); i++) {
+        if (!paired_controllers[i]) {
+            paired_controllers[i] = ctlr;
+            return i % 4 + 1;
+        }
+    }
+    const unsigned int slot = paired_controllers.size() % 4 + 1;
+    paired_controllers.push_back(ctlr);
+    return slot;
+}
+
+
+void ctlr_mgr::add_virt_double_procon_ctlr(std::shared_ptr<phys_ctlr> phys)
+{
+    std::shared_ptr<virt_ctlr_double_pro> ctlr = std::make_shared<virt_ctlr_double_pro>(phys, epoll_manager);
+
+    std::cout << "Creating virtual double pro controller input\n";
+
+    const unsigned int slot1 = this->fill_empty_slot(ctlr);
+    const unsigned int slot2 = this->fill_empty_slot(ctlr);
+
+    ctlr->set_player_leds_to_players(slot1, slot2);
 
     unpaired_controllers.erase(phys->get_devpath());
 }
@@ -266,7 +300,6 @@ void ctlr_mgr::remove_ctlr(const std::string& devpath)
     for (auto& ctlr : paired_controllers) {
         if (!ctlr)
             continue;
-        bool found = false;
         for (auto phys : ctlr->get_phys_ctlrs()) {
             if (phys->get_devpath() == devpath) {
                 bool serial = phys->is_serial_ctlr();
@@ -277,18 +310,13 @@ void ctlr_mgr::remove_ctlr(const std::string& devpath)
                 if (ctlr->no_ctlrs_left()) {
                     if (serial) {
                         std::cout << "Both serial joy-cons disconnected; keep ctlr alive\n";
-                        stale_controllers.push_back(std::move(ctlr));
+                        stale_controllers.push_back(ctlr);
                     } else {
                         std::cout << "unpairing controller\n";
                     }
                     ctlr = nullptr;
                 }
-
-                found = true;
-                break;
             }
         }
-        if (found)
-            break;
     }
 }

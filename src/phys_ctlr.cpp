@@ -172,6 +172,9 @@ void phys_ctlr::handle_event(struct input_event const &ev)
                 case BTN_SELECT:
                     minus = val;
                     break;
+                case BTN_THUMBR:
+                    tr = val;
+                    break;
                 default:
                     break;
             }
@@ -428,6 +431,8 @@ enum phys_ctlr::PairingState phys_ctlr::get_pairing_state() const
                 state = PairingState::Lone;
             else if (plus && minus)
                 state = PairingState::Virt_Procon;
+            else if(tr)
+                state = PairingState::Virt_Double_Procon;
             break;
         case Model::Left_Joycon:
             if (l ^ zl)
@@ -453,5 +458,5 @@ enum phys_ctlr::PairingState phys_ctlr::get_pairing_state() const
 
 void phys_ctlr::zero_triggers()
 {
-    l = zl = r = zr = sl = sr = plus = minus = 0;
+    l = zl = r = zr = sl = sr = plus = minus = tr = false;
 }
